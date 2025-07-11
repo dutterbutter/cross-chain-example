@@ -1,51 +1,56 @@
-# ZKsync Hardhat project template
+# Cross-Chain Vault Unlock (L1 ➝ L2) Test
 
-This project was scaffolded with [zksync-cli](https://github.com/matter-labs/zksync-cli).
+This project showcases a minimal example of sending a message from Ethereum L1 to zkSync Era L2 using custom contracts: `AccessKey` on L1 and `Vault` on L2.
 
-## Project Layout
+The test demonstrates how to:
+- Deploy contracts to both chains
+- Alias L1 address for L2 interaction
+- Fetch bridgehub address via `zks_getBridgehubContract`
+- Estimate the base cost using `l2TransactionBaseCost`
+- Unlock an L2 vault from an L1 transaction
 
-- `/contracts`: Contains solidity smart contracts.
-- `/deploy`: Scripts for contract deployment and interaction.
-- `/test`: Test files.
-- `hardhat.config.ts`: Configuration settings.
+## Setup
 
-## How to Use
+Two running RPC endpoints:
 
-- `npm run compile`: Compiles contracts.
-- `npm run deploy`: Deploys using script `/deploy/deploy.ts`.
-- `npm run interact`: Interacts with the deployed contract using `/deploy/interact.ts`.
-- `npm run test`: Tests the contracts.
+- L1: `http://localhost:8012` (`anvil --no-request-size-limit --port 8012`)
+- L2: `http://localhost:8011` (`anvil-zksync --evm-interpreter --external-l1=http://127.0.0.1:8012 -vv`)
 
-Note: Both `npm run deploy` and `npm run interact` are set in the `package.json`. You can also run your files directly, for example: `npx hardhat deploy-zksync --script deploy.ts`
+```bash
+npm install
+npm run compile
+npm run test
+````
 
-### Environment Settings
+Ensure `.env` is configured:
 
-To keep private keys safe, this project pulls in environment variables from `.env` files. Primarily, it fetches the wallet's private key.
-
-Rename `.env.example` to `.env` and fill in your private key:
-
+```ini
+PRIVATE_KEY=0x...
+L1_RPC_URL=http://localhost:8012
+L2_RPC_URL=http://localhost:8011
+L2_GAS_LIMIT=350000
+L2_PUBDATA_BYTE_LIMIT=800
 ```
-WALLET_PRIVATE_KEY=your_private_key_here...
-```
 
-### Network Support
+---
 
-`hardhat.config.ts` comes with a list of networks to deploy and test contracts. Add more by adjusting the `networks` section in the `hardhat.config.ts`. To make a network the default, set the `defaultNetwork` to its name. You can also override the default using the `--network` option, like: `hardhat test --network dockerizedNode`.
+## Structure
 
-### Local Tests
+* `contracts/` – Solidity contracts for L1 & L2
+* `test/` – E2E test for cross-chain vault unlock
 
-Running `npm run test` by default runs the [ZKsync In-memory Node](https://docs.zksync.io/build/test-and-debug/in-memory-node) provided by the [@matterlabs/hardhat-zksync-node](https://docs.zksync.io/build/tooling/hardhat/hardhat-zksync-node) tool.
+---
 
-Important: ZKsync In-memory Node currently supports only the L2 node. If contracts also need L1, use another testing environment like Dockerized Node. Refer to [test documentation](https://docs.zksync.io/build/test-and-debug) for details.
+## Dependencies
 
-## Useful Links
+* Hardhat
+* Ethers
+* anvil
+* anvil-zksync
+* ZKsync contracts: `@matter-labs/zksync-contracts`
 
-- [Docs](https://docs.zksync.io/build)
-- [Official Site](https://zksync.io/)
-- [GitHub](https://github.com/matter-labs)
-- [Twitter](https://twitter.com/zksync)
-- [Discord](https://join.zksync.dev/)
+---
 
 ## License
 
-This project is under the [MIT](./LICENSE) license.
+MIT
