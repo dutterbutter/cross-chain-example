@@ -8,10 +8,10 @@ dotenv.config();
  *  Toggle ZK plugins with an env var so we                 *
  *  can run two separate compile passes.                    *
  * --------------------------------------------------------- */
-if (process.env.ZKSYNC === 'true') {
-  require('@matterlabs/hardhat-zksync');
-  require('@matterlabs/hardhat-zksync-deploy');
-}
+// if (process.env.ZKSYNC === 'true') {
+//   require('@matterlabs/hardhat-zksync');
+//   require('@matterlabs/hardhat-zksync-deploy');
+// }
 
 const config: HardhatUserConfig = {
   solidity: '0.8.30',
@@ -35,12 +35,12 @@ const config: HardhatUserConfig = {
       accounts: [process.env.PRIVATE_KEY!],
     },
   },
-  zksolc: {
-    version: '1.5.15',
-    settings: {
-      codegen: 'yul',
-    },
-  },
+  // zksolc: {
+  //   version: '1.5.15',
+  //   settings: {
+  //     codegen: 'yul',
+  //   },
+  // },
 };
 
 export default config;

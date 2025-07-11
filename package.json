@@ -9,7 +9,7 @@
     "deploy": "hardhat run ./scripts/deploy.ts",
     "compile": "npm run compile:l1 && npm run compile:l2",
     "clean": "hardhat clean",
-    "test": "ZKSYNC=true hardhat test --network anvilZKsync",
+    "test": "hardhat test --network anvilZKsync",
     "compile:l1": "ZKSYNC=false hardhat compile --network l1",
     "compile:l2": "ZKSYNC=true  hardhat compile --network anvilZKsync"
   },
