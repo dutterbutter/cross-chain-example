@@ -10,13 +10,9 @@ import {
   utils as zkUtils,
   Contract as ZkContract,
 } from 'zksync-ethers';
-import { ContractFactory, JsonRpcProvider, Wallet as EthWallet } from 'ethers';
+import { ContractFactory, JsonRpcProvider, Wallet as EthWallet, Contract } from 'ethers';
 
 const ART_DIR_L1 = path.resolve(__dirname, '../artifacts');
-
-const IBRIDGEHUB_ABI = [
-  'function l2TransactionBaseCost(uint256,uint256,uint256,uint256) view returns (uint256)',
-];
 
 async function loadArtifact(baseDir: string, name: string) {
   const p = path.join(baseDir, 'contracts', `${name}.sol`, `${name}.json`);
@@ -50,7 +46,10 @@ describe('Cross-chain vault unlock', function () {
     const bridgeHub    = await l2Provider.send('zks_getBridgehubContract', []);
     const gasLimit     = BigInt(process.env.L2_GAS_LIMIT! || '350000');
     const pubdataLimit = BigInt(process.env.L2_PUBDATA_BYTE_LIMIT! || '800');
-    const bridge = new ZkContract(bridgeHub, IBRIDGEHUB_ABI, walletL1);
+    const BridgehubArt = await hre.artifacts.readArtifact(
+      '@matterlabs/zksync-contracts/contracts/l1-contracts/bridgehub/IBridgehub.sol:IBridgehub'
+    );
+    const bridge = new Contract(bridgeHub, BridgehubArt.abi, walletL1);
     const feeData = await l1Provider.getFeeData();
     const baseCost = await bridge.l2TransactionBaseCost(
       BigInt(260),
