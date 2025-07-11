@@ -8,7 +8,7 @@ function applyL1ToL2Alias(address: string): string {
   return `0x${(BigInt(address) + BigInt('0x1111000000000000000000000000000000001111')).toString(16).padStart(40, '0')}`;
 }
 
-describe('Cross-chain vault unlock (ethers + hardhat only)', function () {
+describe('Cross-chain vault unlock', function () {
   const l1Provider = new JsonRpcProvider(process.env.L1_RPC_URL || 'http://localhost:8012');
   const l2Provider = new JsonRpcProvider(process.env.L2_RPC_URL || 'http://localhost:8011');
   const walletL1 = new Wallet(process.env.PRIVATE_KEY!, l1Provider);
