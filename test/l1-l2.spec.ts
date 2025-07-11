@@ -1,93 +1,78 @@
+import 'dotenv/config';
 import { expect } from 'chai';
-import { Provider, Wallet as ZKWallet, utils, Contract } from 'zksync-ethers';
-import { JsonRpcProvider, Wallet, ContractFactory, parseEther } from 'ethers';
-import { Deployer } from '@matterlabs/hardhat-zksync';
-import * as hre from 'hardhat';
-import AccessKeyArtifact from '../artifacts-zk/contracts/AccessKey.sol/AccessKey.json';
+import hre from 'hardhat';
+import { ContractFactory, JsonRpcProvider, Wallet, Contract } from 'ethers';
 
-const IBRIDGEHUB_ABI = [
-  'function l2TransactionBaseCost(uint256,uint256,uint256,uint256) view returns (uint256)'
-];
+// equivalent to AddressAliasHelper.applyL1ToL2Alias
+function applyL1ToL2Alias(address: string): string {
+  return `0x${(BigInt(address) + BigInt('0x1111000000000000000000000000000000001111')).toString(16).padStart(40, '0')}`;
+}
 
-const RICH_WALLET_PK =
-  '0x4bbbf85ce3377467afe5d46f804f221813b2bb87f24d81f60f1fcdbf7cbf4356';
+describe('Cross-chain vault unlock', function () {
+  const l1Provider = new JsonRpcProvider(process.env.L1_RPC_URL || 'http://localhost:8012');
+  const l2Provider = new JsonRpcProvider(process.env.L2_RPC_URL || 'http://localhost:8011');
+  const walletL1 = new Wallet(process.env.PRIVATE_KEY!, l1Provider);
+  const walletL2 = new Wallet(process.env.PRIVATE_KEY!, l2Provider);
 
-describe('AccessKey Vault end-to-end', () => {
-  const l1Provider = new JsonRpcProvider('http://127.0.0.1:8012');
-  const l2Provider = new Provider('http://127.0.0.1:8011');
-
-  const walletL1 = new Wallet(RICH_WALLET_PK, l1Provider);
-  const walletL2 = new ZKWallet(RICH_WALLET_PK, l2Provider, l1Provider);
-
-  let accessKey: Contract;
-  let vault: Contract;
-  let bridgeHub: string;
-
-  before(async () => {
-    // ───── Deploy AccessKey (L1) ─────
-    const accessKeyFactory = new ContractFactory(
-      AccessKeyArtifact.abi,
-      AccessKeyArtifact.bytecode,
-      walletL1,
-    );
-    accessKey = (await accessKeyFactory.deploy()) as unknown as Contract;
+  it('should deploy AccessKey on L1, Vault on L2, then unlock', async function () {
+    // ── Load AccessKey artifact and deploy on L1
+    const AccessKeyArt = await hre.artifacts.readArtifact('AccessKey');
+    const accessKey: any = await new ContractFactory(
+      AccessKeyArt.abi,
+      AccessKeyArt.bytecode,
+      walletL1
+    ).deploy();
     await accessKey.waitForDeployment();
 
-    // ───── Deploy Vault (L2) ─────
-    const deployerL2 = new Deployer(hre, walletL2);
-    const Vault = await deployerL2.loadArtifact('Vault');
-    vault = await deployerL2.deploy(Vault, [
-      utils.applyL1ToL2Alias(accessKey.target as string),
-    ]);
+    // ── Load Vault artifact and deploy on L2 using aliased AccessKey address
+    const aliased = applyL1ToL2Alias(await accessKey.getAddress());
+    const VaultArt = await hre.artifacts.readArtifact('Vault');
+    const vault = await new ContractFactory(
+      VaultArt.abi,
+      VaultArt.bytecode,
+      walletL2
+    ).deploy(aliased);
     await vault.waitForDeployment();
 
-    bridgeHub = await l2Provider.send('zks_getBridgehubContract', []);
-  });
+    // ── Get base cost from BridgeHub
+    const bridgeHubAddr = await l2Provider.send('zks_getBridgehubContract', []);
+    const BridgehubArt = await hre.artifacts.readArtifact('@matterlabs/zksync-contracts/contracts/l1-contracts/bridgehub/IBridgehub.sol:IBridgehub');
+    const bridge = new Contract(bridgeHubAddr, BridgehubArt.abi, walletL1);
 
-  it('unlocks the vault via L1→L2 message', async () => {
-    const l2GasLimit = BigInt(10000000);
-    const l1GasPrice = (await l1Provider.getFeeData()).gasPrice ?? BigInt(0);
-    const bridge = new Contract(bridgeHub, IBRIDGEHUB_ABI, walletL1);
-    const baseCost: bigint = await bridge.l2TransactionBaseCost(
-      260,
-      l1GasPrice,
-      l2GasLimit,
-      800n
+    const gasLimit = BigInt(process.env.L2_GAS_LIMIT || '350000');
+    const pubdataLimit = BigInt(process.env.L2_PUBDATA_BYTE_LIMIT || '800');
+    const gasPrice = (await l1Provider.getFeeData()).gasPrice ?? BigInt(0);
+
+    const baseCost = await bridge.l2TransactionBaseCost(
+      BigInt(260),
+      gasPrice,
+      gasLimit,
+      pubdataLimit
     );
-    // const baseCost = await walletL2.getBaseCost({
-    //   gasLimit: l2GasLimit,
-    //   gasPrice: l1GasPrice,
-    // });
 
-    // ---- Send the cross-chain tx on L1 ----
-    const unlockData = vault.interface.encodeFunctionData('unlock');
-    let receipt = await (accessKey as any)
-      .connect(walletL1)
-      .unlockVaultOnL2(
-        (await l2Provider.getNetwork()).chainId,
-        bridgeHub,
-        vault.target,
-        unlockData,
-        l2GasLimit,
-        800,
-        baseCost,
-        { value: baseCost, gasPrice: l1GasPrice },
-      )
-      .then((tx: { wait: () => any; }) => tx.wait());
-    
-    console.log('L1 tx hash:', receipt.hash);  
-    expect(receipt.status).to.equal(1);
+    // ── Encode unlock call and send from L1
+    const payload = new Contract(await vault.getAddress(), VaultArt.abi, l2Provider)
+      .interface.encodeFunctionData('unlock');
 
-    await walletL2.sendTransaction({
-      to: '0x976EA74026E726554dB657fA54763abd0C3a0aa9',
-      value: parseEther('0.01'),
-    });
+    const tx = await accessKey.unlockVaultOnL2(
+      BigInt((await l2Provider.getNetwork()).chainId),
+      bridgeHubAddr,
+      await vault.getAddress(),
+      payload,
+      gasLimit,
+      pubdataLimit,
+      baseCost,
+      { value: baseCost }
+    );
+    await tx.wait();
 
-    // ---- Wait (≤30 s) for the vault to unlock ----
-    for (let i = 0; i < 30 && !(await vault.isVaultUnlocked()); i++) {
+    // ── Poll for unlock completion on L2
+    const vaultReader = new Contract(await vault.getAddress(), VaultArt.abi, l2Provider);
+    for (let i = 0; i < 30; i++) {
+      if (await vaultReader.isVaultUnlocked()) break;
       await new Promise(r => setTimeout(r, 1000));
     }
 
-    expect(await vault.isVaultUnlocked()).to.equal(true);
+    expect(await vaultReader.isVaultUnlocked()).to.be.true;
   });
 });
