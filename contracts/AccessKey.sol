@@ -7,7 +7,7 @@ contract AccessKey {
     address public owner;
 
     constructor() {
-        owner = msg.sender;
+      owner = msg.sender;
     }
 
     function unlockVaultOnL2(
